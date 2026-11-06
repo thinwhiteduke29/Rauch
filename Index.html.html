@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rauch-Tagebuch</title>
+<style>
+:root{--bg:#eef1ee;--card:#fff;--ink:#1c2a29;--mute:#6b7b79;--acc:#1f7a6d;--accink:#fff;--warn:#c4532d;--line:#d9e0dd;--bar:#9fc9c1;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121917;--card:#1b2523;--ink:#e6efed;--mute:#8da09c;--acc:#4fb8a8;--accink:#0b1513;--warn:#e07a52;--line:#2c3a37;--bar:#2f5a53}}
+*{box-sizing:border-box}
+html{color-scheme:light dark}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 "DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-tap-highlight-color:transparent}
+main{max-width:560px;margin:0 auto;padding:16px 16px 96px}
+h1{font-size:22px;margin:8px 0 14px;font-weight:700}
+.card{background:var(--card);border-radius:18px;padding:18px;margin-bottom:14px;border:1px solid var(--line)}
+.big{font-size:72px;font-weight:700;line-height:1;letter-spacing:-2px}
+.mute{color:var(--mute);font-size:14px}
+.row{display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
+.track{height:10px;background:var(--line);border-radius:6px;margin-top:14px;overflow:hidden}
+.fill{height:100%;background:var(--acc);border-radius:6px;transition:width .3s}
+.fill.over{background:var(--warn)}
+button{font:inherit;border:0;border-radius:14px;cursor:pointer;color:var(--ink);background:var(--line);padding:12px 16px}
+button:focus-visible,input:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.main-btn{width:100%;background:var(--acc);color:var(--accink);font-size:20px;font-weight:700;padding:22px;border-radius:18px;margin-bottom:10px}
+.main-btn:active{transform:scale(.98)}
+.ghost{background:transparent;border:1px solid var(--line)}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.list li:last-child{border:0}
+.x{padding:6px 12px;background:transparent;color:var(--mute)}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))}
+nav button{flex:1;padding:12px 4px;font-size:15px;background:transparent;color:var(--mute);border-radius:12px;font-weight:600}
+nav button.on{color:var(--acc);background:var(--bg)}
+.seg{display:flex;gap:6px;margin-bottom:14px}
+.seg button{flex:1;padding:9px}
+.seg button.on{background:var(--acc);color:var(--accink)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:var(--bg);border-radius:14px;padding:12px}
+.stat b{display:block;font-size:24px;letter-spacing:-.5px}
+label{display:block;margin-bottom:12px;font-weight:600}
+input[type=number],input[type=datetime-local]{width:100%;font:inherit;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-top:4px}
+svg{width:100%;height:auto;display:block}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<nav>
+<button data-t="heute" class="on">Heute</button>
+<button data-t="stats">Auswertung</button>
+<button data-t="vorrat">Vorrat</button>
+<button data-t="set">Einstellungen</button>
+</nav>
+<script>
+var D={tobPrice:9,tobPer:40,papPrice:0.2,papPer:50,filPrice:1.5,filPer:120,goal:10},S={log:[],set:Object.assign({},D),stock:{tob:0,pap:0,fil:0},packs:[],tobSince:null,v:2},note='',emptyOpen=false,tab='heute',range=7,adding=false;
+try{var raw=localStorage.getItem('rauch-v1');if(raw){var o=JSON.parse(raw);if(o&&o.log){S.log=o.log;var os=o.set||{};if(os.price!=null&&os.tobPrice==null){os.tobPrice=os.price;os.tobPer=os.perPack}S.set=Object.assign({},D,os);S.stock=Object.assign({tob:0,pap:0,fil:0},o.stock||{});S.packs=o.packs||[];S.tobSince=o.tobSince||null;if(!o.v)S.stock.tob=Math.round(Math.max(0,S.stock.tob)/S.set.tobPer)}}}catch(e){}
+function save(){try{localStorage.setItem('rauch-v1',JSON.stringify(S))}catch(e){}}
+var $=function(s){return document.querySelector(s)};
+function p(n){return n<10?'0'+n:''+n}
+function dk(t){var d=new Date(t);return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())}
+function hm(t){var d=new Date(t);return p(d.getHours())+':'+p(d.getMinutes())}
+function eur(x){return x.toLocaleString('de-DE',{style:'currency',currency:'EUR'})}
+function num(x,d){return x.toLocaleString('de-DE',{maximumFractionDigits:d==null?1:d})}
+function avg(){var f=S.packs.slice(-5);return f.length?f.reduce(function(a,b){return a+b.count},0)/f.length:S.set.tobPer}
+function unit(){var s=S.set;return s.tobPrice/avg()+s.papPrice/s.papPer+s.filPrice/s.filPer}
+function cost(n){return n*unit()}
+function use(d){S.stock.pap+=d;S.stock.fil+=d}
+function curCount(){var from=S.tobSince||S.log[0]||Date.now();return S.log.filter(function(t){return t>=from}).length}
+function left(){var s=S.stock,m=Math.min(s.pap,s.fil),w='Blättchen und Filter reichen noch für ca. '+Math.floor(Math.max(0,m))+' Zigaretten.';if(s.tob<=0)w+=' Kein Tabak mehr im Vorrat.';return '<div class="mute" style="margin-top:6px'+(m<=10||s.tob<=0?';color:var(--warn)':'')+'">'+w+'</div>'}
+function vorrat(){
+var s=S.stock,n=curCount(),f=S.packs,a=f.length?num(avg()):null;
+var row=function(k,t,p,u){return '<div class="card"><div class="row"><div><b>'+t+'</b><div class="mute">'+num(Math.max(0,s[k]),0)+' '+u+' übrig</div></div><button data-buy="'+k+'">+ 1 '+p+'</button></div><label style="margin:10px 0 0;font-weight:400">Bestand genau setzen<input type="number" min="0" id="v_'+k+'" value="'+Math.round(Math.max(0,s[k]))+'"></label></div>'};
+return '<h1>Vorrat</h1><div class="card"><div class="row"><div><b>Drehtabak</b><div class="mute">'+s.tob+' Packungen im Vorrat, auch die angebrochene</div></div><button data-buy="tob">+ 1 Packung</button></div>'+
+'<div style="margin-top:12px">Aktuelle Packung: bisher <b>'+n+'</b> Zigaretten gedreht</div>'+
+'<button style="margin-top:10px" id="empty">Packung ist leer</button>'+
+(emptyOpen?'<div style="margin-top:12px"><label>Mit dieser Packung gedrehte Zigaretten<input type="number" min="1" id="ecount" value="'+n+'"></label><button class="main-btn" style="font-size:17px;padding:14px;margin:0" id="eok">Packung abschließen</button></div>':'')+
+(note?'<p style="color:var(--acc);font-weight:600;margin-bottom:0">'+note+'</p>':'')+
+(f.length?'<div class="mute" style="margin-top:12px">Durchschnitt der letzten '+Math.min(5,f.length)+' Packungen: '+a+' Zigaretten pro Packung</div><ul class="list">'+f.slice(-5).map(function(p,i){var ix=f.length-Math.min(5,f.length)+i;return '<li><span>'+new Date(p.t).toLocaleDateString('de-DE')+': '+p.count+' Zigaretten</span><button class="x" data-pdel="'+ix+'">Löschen</button></li>'}).reverse().join('')+'</ul>':'<p class="mute" style="margin-bottom:0">Sobald du die erste Packung als leer meldest, rechne ich daraus deinen echten Wert aus.</p>')+'</div>'+
+row('pap','Blättchen','Heftchen','Stück')+row('fil','Filter','Packung','Stück')+
+'<button class="main-btn" style="font-size:17px;padding:14px" id="vsave">Bestand speichern</button><p class="mute">Jede eingetragene Zigarette zieht 1 Blättchen und 1 Filter ab. Tabak wird erst beim Leermelden der Packung abgerechnet.</p>'}
+function fld(id,l,v,st){return '<label>'+l+'<input type="number" inputmode="decimal" step="'+st+'" min="0" id="'+id+'" value="'+v+'"></label>'}
+function days(n,off){var a=[];for(var i=n-1+(off||0);i>=(off||0);i--){var d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()-i);a.push(d)}return a}
+function counts(ds){var m={};S.log.forEach(function(t){var k=dk(t);m[k]=(m[k]||0)+1});return ds.map(function(d){return m[dk(d)]||0})}
+function add(t){use(-1);S.log.push(t);S.log.sort(function(a,b){return a-b});save();render()}
+function del(t){var i=S.log.indexOf(t);if(i>-1){S.log.splice(i,1);use(1);save();render()}}
+function since(){if(!S.log.length)return 'Noch kein Eintrag';var m=Math.floor((Date.now()-S.log[S.log.length-1])/60000);if(m<0)m=0;if(m<60)return 'Letzte Zigarette vor '+m+' Min.';var h=Math.floor(m/60);if(h<48)return 'Letzte Zigarette vor '+h+' Std. '+(m%60)+' Min.';return 'Letzte Zigarette vor '+Math.floor(h/24)+' Tagen'}
+function heute(){
+var k=dk(Date.now()),t=S.log.filter(function(x){return dk(x)==k}),n=t.length,g=S.set.goal,pc=g?Math.min(100,n/g*100):0;
+var h='<h1>Heute</h1><div class="card"><div class="row"><div><div class="big">'+n+'</div><div class="mute">Zigaretten'+(g?' von '+g+' geplant':'')+'</div></div><div style="text-align:right"><b>'+eur(cost(n))+'</b><div class="mute">Kosten heute</div></div></div>'+
+(g?'<div class="track"><div class="fill'+(n>g?' over':'')+'" style="width:'+pc+'%"></div></div>':'')+
+'<div class="mute" id="since" style="margin-top:12px">'+since()+'</div>'+left()+'</div>'+
+'<button class="main-btn" id="plus">Zigarette eintragen</button>'+
+'<button class="ghost" style="width:100%;margin-bottom:14px" id="late">Nachtragen mit Uhrzeit</button>'+
+'<div class="card'+(adding?'':' hide')+'" id="addbox"><label>Zeitpunkt<input type="datetime-local" id="dt"></label><button class="main-btn" style="font-size:17px;padding:14px;margin:0" id="dtok">Nachtrag speichern</button></div>'+
+'<div class="card"><b>Heutige Einträge</b>';
+if(!n)h+='<p class="mute">Noch nichts eingetragen. Tippe oben, sobald du rauchst.</p>';
+else h+='<ul class="list">'+t.slice().reverse().map(function(x){return '<li><span>'+hm(x)+' Uhr</span><button class="x" data-del="'+x+'" aria-label="Eintrag löschen">Löschen</button></li>'}).join('')+'</ul>';
+return h+'</div>'}
+function chart(ds,c){
+var W=340,H=150,top=10,bot=22,max=Math.max.apply(null,c.concat([S.set.goal||0,1])),bw=W/ds.length,ph=H-top-bot,s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Zigaretten pro Tag">';
+c.forEach(function(v,i){var bh=v/max*ph,x=i*bw+bw*.15,w=bw*.7;
+s+='<rect x="'+x+'" y="'+(top+ph-bh)+'" width="'+w+'" height="'+bh+'" rx="3" fill="'+(S.set.goal&&v>S.set.goal?'var(--warn)':'var(--bar)')+'"/>';
+if(ds.length<=7){s+='<text x="'+(x+w/2)+'" y="'+(top+ph-bh-3)+'" text-anchor="middle" font-size="10" fill="var(--ink)">'+v+'</text>';
+s+='<text x="'+(x+w/2)+'" y="'+(H-6)+'" text-anchor="middle" font-size="10" fill="var(--mute)">'+ds[i].toLocaleDateString('de-DE',{weekday:'short'})+'</text>'}
+else if(i%5==0||i==ds.length-1){s+='<text x="'+(x+w/2)+'" y="'+(H-6)+'" text-anchor="middle" font-size="9" fill="var(--mute)">'+ds[i].getDate()+'.'+(ds[i].getMonth()+1)+'.</text>'}});
+if(S.set.goal){var y=top+ph-S.set.goal/max*ph;s+='<line x1="0" x2="'+W+'" y1="'+y+'" y2="'+y+'" stroke="var(--acc)" stroke-dasharray="4 4"/>'}
+return s+'</svg>'}
+function stats(){
+var ds=days(range),c=counts(ds),sum=c.reduce(function(a,b){return a+b},0),avg=sum/range,
+pc=counts(days(range,range)),psum=pc.reduce(function(a,b){return a+b},0),
+best=Math.min.apply(null,c),worst=Math.max.apply(null,c),
+diff=psum?Math.round((sum-psum)/psum*100):null,
+hrs=[];for(var i=0;i<24;i++)hrs.push(0);
+var from=ds[0].getTime()-12*3600000;S.log.forEach(function(t){if(t>=from)hrs[new Date(t).getHours()]++});
+var hm2=Math.max.apply(null,hrs.concat([1])),hs='<svg viewBox="0 0 340 90">';
+hrs.forEach(function(v,i){var bh=v/hm2*55;hs+='<rect x="'+(i*14.1+1)+'" y="'+(62-bh)+'" width="11" height="'+bh+'" rx="2" fill="var(--bar)"/>';if(i%6==0)hs+='<text x="'+(i*14.1)+'" y="80" font-size="10" fill="var(--mute)">'+i+' Uhr</text>'});hs+='</svg>';
+var peak=hrs.indexOf(Math.max.apply(null,hrs));
+var trend=diff===null?'Kein Vergleich möglich':(diff>0?'+':'')+diff+' % zum Zeitraum davor';
+return '<h1>Auswertung</h1><div class="seg"><button data-r="7" class="'+(range==7?'on':'')+'">7 Tage</button><button data-r="30" class="'+(range==30?'on':'')+'">30 Tage</button><button data-r="90" class="'+(range==90?'on':'')+'">90 Tage</button></div>'+
+'<div class="card"><b>Pro Tag</b>'+chart(ds,c)+(S.set.goal?'<div class="mute">Gestrichelte Linie: dein Tagesziel</div>':'')+'</div>'+
+'<div class="card"><div class="grid"><div class="stat"><b>'+sum+'</b><span class="mute">Zigaretten gesamt</span></div><div class="stat"><b>'+num(avg)+'</b><span class="mute">Ø pro Tag</span></div><div class="stat"><b>'+eur(cost(sum))+'</b><span class="mute">Ausgaben</span></div><div class="stat"><b>'+eur(cost(sum)/range*30)+'</b><span class="mute">Hochrechnung pro Monat</span></div><div class="stat"><b>'+best+' / '+worst+'</b><span class="mute">Bester / schlechtester Tag</span></div><div class="stat"><b style="color:'+(diff>0?'var(--warn)':'var(--acc)')+'">'+(diff===null?'–':(diff>0?'+':'')+diff+' %')+'</b><span class="mute">Trend</span></div></div><p class="mute" style="margin-bottom:0">'+trend+'</p></div>'+
+'<div class="card"><b>Uhrzeiten</b>'+hs+'<div class="mute">'+(sum?'Meiste Zigaretten gegen '+peak+' Uhr.':'Noch keine Daten im Zeitraum.')+'</div></div>'}
+function settings(){var s=S.set;
+return '<h1>Einstellungen</h1><div class="card"><b style="display:block;margin:0 0 8px">Drehtabak (Feinschnitt)</b>'+fld('s1','Preis pro Packung (€)',s.tobPrice,0.01)+fld('s2','Zigaretten pro Packung (Schätzung bis zur ersten leeren Packung)',s.tobPer,1)+'<b style="display:block;margin:6px 0 8px">Blättchen</b>'+fld('s3','Preis pro Heftchen (€)',s.papPrice,0.01)+fld('s4','Blättchen pro Heftchen',s.papPer,1)+'<b style="display:block;margin:6px 0 8px">Filter</b>'+fld('s5','Preis pro Packung (€)',s.filPrice,0.01)+fld('s6','Filter pro Packung',s.filPer,1)+'<b style="display:block;margin:6px 0 8px">Ziel</b>'+fld('s7','Tagesziel (0 = keins)',s.goal,1)+'<button class="main-btn" style="font-size:17px;padding:14px;margin:0" id="ssave">Speichern</button><p class="mute" id="msg"></p></div>'+
+'<div class="card"><b>Daten</b><p class="mute">Alles bleibt auf diesem Gerät im Browser gespeichert. Kopiere die Daten als CSV, um sie zu sichern.</p><button id="csv">Als CSV kopieren</button> <button id="reset" style="color:var(--warn)">Alles löschen</button><p class="mute" id="msg2"></p></div><div class="card"><b>Sicherung</b><p class="mute">Sichert alle Einträge, den Vorrat, die Packungen und die Einstellungen. Speichere den Text zum Beispiel in Notizen, um ihn später wiederherzustellen.</p><button id="bk">Sicherung kopieren</button> <button id="bs">Teilen</button><label style="margin-top:14px">Sicherung einfügen<textarea id="bt" rows="4" placeholder="Gesicherten Text hier einfügen" style="width:100%;font:inherit;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-top:4px"></textarea></label><button id="br">Wiederherstellen</button><p class="mute" id="msg3"></p></div>'}
+function render(){
+var a=$('#app');a.innerHTML=tab=='heute'?heute():tab=='stats'?stats():tab=='vorrat'?vorrat():settings();
+document.querySelectorAll('nav button').forEach(function(b){b.classList.toggle('on',b.dataset.t==tab)});
+var q=function(s,f){var e=$(s);if(e)e.onclick=f};
+q('#plus',function(){add(Date.now())});
+document.querySelectorAll('[data-buy]').forEach(function(b){b.onclick=function(){var k=b.dataset.buy,s=S.set;S.stock[k]+=k=='tob'?1:(k=='pap'?s.papPer:s.filPer);note='';save();render()}});
+q('#vsave',function(){['pap','fil'].forEach(function(k){var x=parseFloat($('#v_'+k).value);if(x>=0)S.stock[k]=Math.round(x)});save();render()});
+q('#empty',function(){emptyOpen=true;note='';render()});
+q('#eok',function(){var c=parseInt($('#ecount').value);if(!(c>0))return;S.packs.push({count:c,t:Date.now()});S.tobSince=Date.now();S.stock.tob=Math.max(0,S.stock.tob-1);emptyOpen=false;note='Mit dieser Packung hast du '+c+' Zigaretten gedreht. Durchschnitt jetzt: '+num(avg())+' pro Packung.';save();render()});
+document.querySelectorAll('[data-pdel]').forEach(function(b){b.onclick=function(){S.packs.splice(+b.dataset.pdel,1);save();render()}});
+q('#late',function(){adding=!adding;render();if(adding){var d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());$('#dt').value=d.toISOString().slice(0,16)}});
+q('#dtok',function(){var v=$('#dt').value;if(!v)return;var t=new Date(v).getTime();if(isNaN(t))return;adding=false;add(t)});
+document.querySelectorAll('[data-del]').forEach(function(b){b.onclick=function(){del(+b.dataset.del)}});
+document.querySelectorAll('[data-r]').forEach(function(b){b.onclick=function(){range=+b.dataset.r;render()}});
+q('#ssave',function(){var v=['s1','s2','s3','s4','s5','s6','s7'].map(function(i){return parseFloat($('#'+i).value)});
+if(v.some(function(x){return !(x>=0)})||!(v[1]>0)||!(v[3]>0)||!(v[5]>0)){$('#msg').textContent='Bitte gültige Zahlen eingeben.';return}
+S.set={tobPrice:v[0],tobPer:v[1],papPrice:v[2],papPer:v[3],filPrice:v[4],filPer:v[5],goal:Math.round(v[6])};save();$('#msg').textContent='Gespeichert.'});
+q('#csv',function(){var t='Datum;Uhrzeit\n'+S.log.map(function(x){return new Date(x).toLocaleDateString('de-DE')+';'+hm(x)}).join('\n');
+var ok=function(){$('#msg2').textContent='CSV in die Zwischenablage kopiert.'};
+try{navigator.clipboard.writeText(t).then(ok,function(){$('#msg2').textContent='Kopieren nicht erlaubt.'})}catch(e){$('#msg2').textContent='Kopieren nicht erlaubt.'}});
+var bkp=function(){return JSON.stringify(S)};
+q('#bk',function(){try{navigator.clipboard.writeText(bkp()).then(function(){$('#msg3').textContent='Sicherung kopiert. Füge sie jetzt in Notizen oder eine Datei ein.'},function(){$('#msg3').textContent='Kopieren nicht erlaubt.'})}catch(e){$('#msg3').textContent='Kopieren nicht erlaubt.'}});
+q('#bs',function(){try{navigator.share({title:'Rauch-Tagebuch Sicherung',text:bkp()}).catch(function(){})}catch(e){$('#msg3').textContent='Teilen nicht verfügbar. Nutze „Sicherung kopieren“.'}});
+q('#br',function(){try{var o=JSON.parse($('#bt').value.trim());if(!o||!Array.isArray(o.log)||!o.set)throw 0;if(!confirm('Aktuelle Daten durch die Sicherung ersetzen?'))return;S.log=o.log.filter(function(t){return typeof t=='number'}).sort(function(a,b){return a-b});S.set=Object.assign({},D,o.set);S.stock=Object.assign({tob:0,pap:0,fil:0},o.stock||{});S.packs=o.packs||[];S.tobSince=o.tobSince||null;save();tab='heute';render()}catch(e){$('#msg3').textContent='Das ist keine gültige Sicherung.'}});
+q('#reset',function(){if(!confirm('Wirklich alle Einträge löschen?'))return;use(S.log.length);S.log=[];save();render()})}
+document.querySelectorAll('nav button').forEach(function(b){b.onclick=function(){tab=b.dataset.t;adding=false;render();window.scrollTo(0,0)}});
+setInterval(function(){var e=$('#since');if(e)e.textContent=since()},30000);
+render();
+</script>
+</body>
+</html>
